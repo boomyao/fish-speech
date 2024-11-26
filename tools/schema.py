@@ -165,6 +165,10 @@ class ServeTTSRequest(BaseModel):
     # Audio format
     format: Literal["wav", "pcm", "mp3"] = "wav"
     mp3_bitrate: Literal[64, 128, 192] = 128
+    ref_object_name: str | None = None
+    ref_text: str | None = None
+    speed: float = 1.0
+    should_enhance: bool = False
     # References audios for in-context learning
     references: list[ServeReferenceAudio] = []
     # Reference id

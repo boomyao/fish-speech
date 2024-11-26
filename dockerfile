@@ -10,7 +10,15 @@ RUN set -ex \
     && pip install huggingface_hub \
     && HF_ENDPOINT=${HF_ENDPOINT} huggingface-cli download --resume-download fishaudio/${HUGGINGFACE_MODEL} --local-dir checkpoints/${HUGGINGFACE_MODEL}
 
-FROM python:3.12-slim-bookworm
+RUN set -ex \
+    && pip install huggingface_hub \
+    && huggingface-cli download --resume-download ResembleAI/resemble-enhance \
+       --include "enhancer_stage2/hparams.yaml" \
+       --include "enhancer_stage2/ds/G/latest" \
+       --include "enhancer_stage2/ds/G/default/mp_rank_00_model_states.pt" \
+       --local-dir checkpoints/resemble-enhance
+
+FROM pytorch/pytorch:2.4.0-cuda12.4-cudnn9-devel
 ARG TARGETARCH
 
 ARG DEPENDENCIES="  \
@@ -45,6 +53,7 @@ COPY --from=stage-1 /opt/fish-speech/checkpoints /opt/fish-speech/checkpoints
 
 ENV GRADIO_SERVER_NAME="0.0.0.0"
 
-EXPOSE 7860
+# EXPOSE 7860
+EXPOSE 6200
 
 CMD ["./entrypoint.sh"]

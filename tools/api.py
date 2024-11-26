@@ -82,6 +82,14 @@ from tools.schema import (
 )
 from tools.vqgan.inference import load_model as load_decoder_model
 
+from tools.oss import cache_file, upload_file
+import uuid
+# from tools.enhance import enhance_audio
+
+import tempfile
+import subprocess
+from tools.enhance import enhance_audio
+
 global_lock = Lock()
 
 # Whether to disable keepalive (which is helpful if the server is in the same cluster)
@@ -621,7 +629,18 @@ def inference(req: ServeTTSRequest):
             ]
         else:
             logger.info("Use same references")
-
+    elif req.ref_object_name is not None:
+        file_path = cache_file(req.ref_object_name)
+        ref_audios = [file_path]
+        prompt_tokens = [
+            encode_reference(
+                decoder_model=decoder_model,
+                reference_audio=audio_to_bytes(str(ref_audio)),
+                enable_reference_audio=True,
+            )
+            for ref_audio in ref_audios
+        ]
+        prompt_texts = [req.ref_text]
     else:
         # Parse reference audio aka prompt
         refs = req.references
@@ -652,7 +671,7 @@ def inference(req: ServeTTSRequest):
         text=(
             req.text
             if not req.normalize
-            else ChnNormedText(raw_text=req.text).normalize()
+            else ChnNormedText(raw_text=req.text, norm_text=req.text).normalize()
         ),
         top_p=req.top_p,
         repetition_penalty=req.repetition_penalty,
@@ -696,6 +715,26 @@ def inference(req: ServeTTSRequest):
             )
 
         fake_audios = fake_audios.float().cpu().numpy()
+
+        if req.speed != 1.0:
+            print("speed", req.speed)
+            # 创建临时文件
+            with tempfile.NamedTemporaryFile(suffix='.wav') as temp_in, \
+                 tempfile.NamedTemporaryFile(suffix='.wav') as temp_out:
+                
+                # 写入原始音频
+                sf.write(temp_in.name, fake_audios, decoder_model.spec_transform.sample_rate)
+                
+                # 使用 ffmpeg 调整速度
+                subprocess.run([
+                    'ffmpeg', '-y',
+                    '-i', temp_in.name,
+                    '-filter:a', f'atempo={req.speed}',
+                    temp_out.name
+                ], check=True)
+                
+                # 读取处理后的音频
+                fake_audios, _ = sf.read(temp_out.name)
 
         if req.streaming:
             yield (fake_audios * 32768).astype(np.int16).tobytes()
@@ -754,6 +793,25 @@ async def api_invoke_model(
         )
     else:
         fake_audios = next(inference(req))
+
+        if req.should_enhance:
+            try:
+                # 保存原始音量
+                original_rms = np.sqrt(np.mean(fake_audios**2))
+                
+                fake_audios = torch.from_numpy(fake_audios)
+                if fake_audios.dim() == 1:
+                    fake_audios = fake_audios.unsqueeze(0)
+                fake_audios, sr = enhance_audio(fake_audios, decoder_model.spec_transform.sample_rate)
+                fake_audios = fake_audios.numpy()
+                
+                # 恢复到原始音量水平
+                current_rms = np.sqrt(np.mean(fake_audios**2))
+                if current_rms > 0:  # 避免除零错误
+                    fake_audios = fake_audios * (original_rms / current_rms)
+            finally:
+                torch.cuda.empty_cache()
+
         buffer = io.BytesIO()
         sf.write(
             buffer,
@@ -761,6 +819,15 @@ async def api_invoke_model(
             decoder_model.spec_transform.sample_rate,
             format=req.format,
         )
+
+        if req.ref_object_name is not None:
+            temp_path = f'/tmp/{uuid.uuid4()}.{req.format}'
+            with open(temp_path, 'wb') as f:
+                f.write(buffer.getvalue())
+            object_name = f'zero_shot/{uuid.uuid4()}.{req.format}'
+            upload_file(temp_path, object_name)
+
+            return JSONResponse({"object_name": object_name, "seed": req.seed})
 
         return StreamResponse(
             iterable=buffer_to_async_generator(buffer.getvalue()),

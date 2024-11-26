@@ -15,6 +15,7 @@ from fish_speech.text.chn_text_norm.fraction import Fraction
 from fish_speech.text.chn_text_norm.money import Money
 from fish_speech.text.chn_text_norm.percentage import Percentage
 from fish_speech.text.chn_text_norm.telephone import TelePhone
+from tn.chinese.normalizer import Normalizer as ZhNormalizer
 
 CURRENCY_NAMES = (
     "(人民币|美元|日元|英镑|欧元|马克|法郎|加拿大元|澳元|港币|先令|芬兰马克|爱尔兰镑|"
@@ -52,6 +53,9 @@ class Text:
         return self.norm_text
 
     def normalize(self):
+        text = ZhNormalizer().normalize(self.norm_text)
+        print(f"normalized: {text}")
+        return text
         text = self.raw_text
 
         # 规范化日期
