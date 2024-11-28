@@ -8,5 +8,4 @@ if [ "${CUDA_ENABLED}" != "true" ]; then
 fi
 
 # exec python tools/webui.py ${DEVICE}
-# exec python -m tools.api --listen 0.0.0.0:6200 --compile ${DEVICE}
-exec python -m tools.api --listen 0.0.0.0:6200
+exec python -m tools.api --listen 0.0.0.0:6200 --compile ${DEVICE}

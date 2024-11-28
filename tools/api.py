@@ -84,7 +84,7 @@ from tools.vqgan.inference import load_model as load_decoder_model
 
 from tools.oss import cache_file, upload_file
 import uuid
-# from tools.enhance import enhance_audio
+import random
 
 import tempfile
 import subprocess
@@ -770,6 +770,8 @@ async def api_invoke_model(
     """
     Invoke model and generate audio
     """
+    if req.seed is None or req.seed == 0:
+        req.seed = random.randint(0, 2**32 - 1)
 
     if args.max_text_length > 0 and len(req.text) > args.max_text_length:
         raise HTTPException(
@@ -827,7 +829,7 @@ async def api_invoke_model(
             object_name = f'zero_shot/{uuid.uuid4()}.{req.format}'
             upload_file(temp_path, object_name)
 
-            return JSONResponse({"object_name": object_name, "seed": req.seed})
+            return JSONResponse({"object_name": object_name, "seed": str(req.seed)})
 
         return StreamResponse(
             iterable=buffer_to_async_generator(buffer.getvalue()),
