@@ -773,6 +773,20 @@ async def api_invoke_model(
     if req.seed is None or req.seed == 0:
         req.seed = random.randint(0, 2**32 - 1)
 
+    # FIX text, preprocess text
+    req.text = req.text.replace('；', '。')
+    req.text = req.text.replace('、', '，')
+    # replace end symbol
+    if req.text.endswith((',', ';', '，', '；')):
+        req.text = req.text[:-1] + '.'
+    # 如果句子逗号数量远多于其他符号，则将中间位置的逗号替换为句号
+    if req.text.count('，') / (req.text.count('。') or 1) > 2:
+        # replace middle index comma to dot
+        for i in range(1, len(req.text) - 1):
+            if req.text[i] == '，':
+                req.text = req.text[:i] + '.' + req.text[i+1:]
+    
+
     if args.max_text_length > 0 and len(req.text) > args.max_text_length:
         raise HTTPException(
             HTTPStatus.BAD_REQUEST,
