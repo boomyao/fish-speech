@@ -3,12 +3,13 @@ ARG TARGETARCH
 
 ARG HUGGINGFACE_MODEL=fish-speech-1.5
 ARG HF_ENDPOINT=https://huggingface.co
+ARG HF_TOKEN
 
 WORKDIR /opt/fish-speech
 
 RUN set -ex \
     && pip install huggingface_hub \
-    && HF_ENDPOINT=${HF_ENDPOINT} huggingface-cli download --resume-download fishaudio/${HUGGINGFACE_MODEL} --local-dir checkpoints/${HUGGINGFACE_MODEL}
+    && HF_ENDPOINT=${HF_ENDPOINT} HF_TOKEN=${HF_TOKEN} huggingface-cli download --resume-download fishaudio/${HUGGINGFACE_MODEL} --local-dir checkpoints/${HUGGINGFACE_MODEL}
 
 RUN set -ex \
     && pip install huggingface_hub \
