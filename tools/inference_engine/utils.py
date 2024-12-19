@@ -18,7 +18,7 @@ class InferenceResult:
 def normalize_text(user_input: str, use_normalization: bool) -> str:
     """Normalize user input text if needed."""
     if use_normalization:
-        return ChnNormedText(raw_text=user_input).normalize()
+        return ChnNormedText(raw_text=user_input, norm_text=user_input).normalize()
     else:
         return user_input
 

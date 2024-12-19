@@ -9,6 +9,7 @@ from loguru import logger
 from fish_speech.models.vqgan.modules.firefly import FireflyArchitecture
 from fish_speech.text.chn_text_norm.text import Text as ChnNormedText
 from fish_speech.utils import autocast_exclude_mps, set_seed
+from tools.file import audio_to_bytes
 from tools.inference_engine.reference_loader import ReferenceLoader
 from tools.inference_engine.utils import InferenceResult, wav_chunk_header
 from tools.inference_engine.vq_manager import VQManager
@@ -17,7 +18,9 @@ from tools.llama.generate import (
     GenerateResponse,
     WrappedGenerateResponse,
 )
-from tools.schema import ServeTTSRequest
+from tools.schema import ServeReferenceAudio, ServeTTSRequest
+
+from tools.oss import cache_file
 
 
 class TTSInferenceEngine(ReferenceLoader, VQManager):
@@ -52,6 +55,10 @@ class TTSInferenceEngine(ReferenceLoader, VQManager):
         if ref_id is not None:
             prompt_tokens, prompt_texts = self.load_by_id(ref_id, req.use_memory_cache)
 
+        elif req.ref_object_name is not None:
+            file_path = cache_file(req.ref_object_name)
+            references = [ServeReferenceAudio(audio=audio_to_bytes(file_path), text=req.ref_text)]
+            prompt_tokens, prompt_texts = self.load_by_hash(references, req.use_memory_cache)
         elif req.references:
             prompt_tokens, prompt_texts = self.load_by_hash(
                 req.references, req.use_memory_cache
@@ -128,6 +135,7 @@ class TTSInferenceEngine(ReferenceLoader, VQManager):
         else:
             # Streaming or not, return the final audio
             audio = np.concatenate(segments, axis=0)
+
             yield InferenceResult(
                 code="final",
                 audio=(sample_rate, audio),
@@ -150,7 +158,7 @@ class TTSInferenceEngine(ReferenceLoader, VQManager):
             text=(
                 req.text
                 if not req.normalize
-                else ChnNormedText(raw_text=req.text).normalize()
+                else ChnNormedText(raw_text=req.text, norm_text=req.text).normalize()
             ),
             top_p=req.top_p,
             repetition_penalty=req.repetition_penalty,

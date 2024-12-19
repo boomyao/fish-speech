@@ -29,7 +29,10 @@ from tools.server.api_utils import (
 from tools.server.inference import inference_wrapper as inference
 from tools.server.model_manager import ModelManager
 from tools.server.model_utils import batch_asr, cached_vqgan_batch_encode, vqgan_decode
-
+from tools.enhance import enhance_audio
+import uuid
+from tools.oss import upload_file
+import random
 MAX_NUM_SAMPLES = int(os.getenv("NUM_SAMPLES", 1))
 
 
@@ -150,6 +153,9 @@ class TTSView(HttpView):
         payload = await request.data()
         req = ServeTTSRequest(**payload)
 
+        if req.seed is None or req.seed == 0:
+            req.seed = random.randint(0, 2**32 - 1)
+
         # Get the model from the app
         app_state = request.app.state
         model_manager: ModelManager = app_state.model_manager
@@ -181,6 +187,25 @@ class TTSView(HttpView):
             )
         else:
             fake_audios = next(inference(req, engine))
+
+            if req.should_enhance:
+                try:
+                    # 保存原始音量
+                    original_rms = np.sqrt(np.mean(fake_audios**2))
+                    
+                    fake_audios = torch.from_numpy(fake_audios)
+                    if fake_audios.dim() == 1:
+                        fake_audios = fake_audios.unsqueeze(0)
+                    fake_audios, sr = enhance_audio(fake_audios, sample_rate)
+                    fake_audios = fake_audios.numpy()
+                    
+                    # 恢复到原始音量水平
+                    current_rms = np.sqrt(np.mean(fake_audios**2))
+                    if current_rms > 0:  # 避免除零错误
+                        fake_audios = fake_audios * (original_rms / current_rms)
+                finally:
+                    torch.cuda.empty_cache()
+
             buffer = io.BytesIO()
             sf.write(
                 buffer,
@@ -188,6 +213,15 @@ class TTSView(HttpView):
                 sample_rate,
                 format=req.format,
             )
+
+            if req.ref_object_name is not None:
+                temp_path = f'/tmp/{uuid.uuid4()}.{req.format}'
+                with open(temp_path, 'wb') as f:
+                    f.write(buffer.getvalue())
+                object_name = f'zero_shot/{uuid.uuid4()}.{req.format}'
+                upload_file(temp_path, object_name)
+
+                return JSONResponse({"object_name": object_name, "seed": str(req.seed or 0)})
 
             return StreamResponse(
                 iterable=buffer_to_async_generator(buffer.getvalue()),

@@ -11,12 +11,12 @@ from tools.server.api_utils import MsgPackRequest, parse_args
 from tools.server.exception_handler import ExceptionHandler
 from tools.server.model_manager import ModelManager
 from tools.server.views import (
-    ASRView,
-    ChatView,
+    # ASRView,
+    # ChatView,
     HealthView,
     TTSView,
-    VQGANDecodeView,
-    VQGANEncodeView,
+    # VQGANDecodeView,
+    # VQGANEncodeView,
 )
 
 
@@ -25,11 +25,11 @@ class API(ExceptionHandler):
         self.args = parse_args()
         self.routes = [
             ("/v1/health", HealthView),
-            ("/v1/vqgan/encode", VQGANEncodeView),
-            ("/v1/vqgan/decode", VQGANDecodeView),
-            ("/v1/asr", ASRView),
+            # ("/v1/vqgan/encode", VQGANEncodeView),
+            # ("/v1/vqgan/decode", VQGANDecodeView),
+            # ("/v1/asr", ASRView),
             ("/v1/tts", TTSView),
-            ("/v1/chat", ChatView),
+            # ("/v1/chat", ChatView),
         ]
         self.routes = Routes([HttpRoute(path, view) for path, view in self.routes])
 
